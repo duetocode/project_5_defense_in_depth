@@ -43,20 +43,24 @@ flowchart LR
         subgraph Server [ Servers with CA Certificates & PK]
             App[Web Server]
             Proxy[Proxy Server]
+            CRL[CRL Server]
         end
 
         subgraph DB [PostgreSQL & Recovery Mecanism]
             LKS@{ shape: cyl, label: "LUKS"}
             POS[PostgreSQL]
             WAL[WAL-G]
+            TPM[TPM 2.0]
         end
         Clients --> App
         App --> Proxy
         Proxy --> POS
+        Proxy --> CRL
         POS --> LKS
         POS --> WAL
+        TPM --> LKS
     end
-    subgraph DBB [Backup Servers]
+    subgraph DBB [Backup]
         BKP@{ shape: cyl, label: "DB Clone"}
         LOG[DB Logs]
         WAL[WAL-G]
