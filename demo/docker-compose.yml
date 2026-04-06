@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: threatdb
+      POSTGRES_HOST_AUTH_METHOD: password
+    command: >
+      postgres
+      -c ssl=off
+      -c log_connections=on
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      intranet:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+
+  client_attacker:
+    image: kalilinux/kali-rolling
+    container_name: client_attacker
+    entrypoint: ["sleep", "infinity"]
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      intranet:
+        ipv4_address: 172.20.0.20
+    depends_on:
+      - postgres
+
+networks:
+  intranet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
