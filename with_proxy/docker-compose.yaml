@@ -59,11 +59,14 @@ services:
     networks:
       - frontend
     volumes:
-      - ./certs/client.crt:/certs/client.crt:ro
-      - ./certs/client.key:/certs/client.key:ro
-      - ./certs/ca-chain.cert.pem:/certs/ca.crt:ro
-    user: postgres
-    command: sleep infinity
+      - ./certs/client.crt:/certs-source/client.crt:ro
+      - ./certs/client.key:/certs-source/client.key:ro
+      - ./certs/ca-chain.cert.pem:/certs-source/ca.crt:ro
+      - ./client-entrypoint.sh:/usr/local/bin/client-entrypoint.sh:ro
+    tmpfs:
+      - /certs
+    entrypoint: ["/usr/local/bin/client-entrypoint.sh"]
+    command: ["sleep", "infinity"]
     depends_on:
       - database
 
