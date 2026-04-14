@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Keep LF line endings in this file for Docker-on-Windows compatibility.
 set -euo pipefail
 
 source_dir=/certs-source
