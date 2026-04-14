@@ -127,6 +127,7 @@ This section is intentionally structured so future benchmark controls can be add
 | Order | Control | Objective | Build-Time Hardening | Runtime Audit | Status |
 |------:|---------|-----------|----------------------|---------------|--------|
 | 1 | CIS 3.1.20 Ensure `log_connections` is enabled | Record all attempted connections for later investigation | Ansible modifies PostgreSQL sample configuration in the hardened image | One-off Compose audit container verifies the live setting with a fresh connection | Implemented and verified |
+| 2 | CIS 4.5 Ensure excessive function privileges are revoked | Prevent user-defined functions from retaining unnecessary privilege-elevation paths or broad execute access | Ansible stages an initialization SQL script that revokes `PUBLIC` execute privileges on public-schema functions and future function defaults | One-off Compose audit container checks the live database for privileged user-defined functions | Implemented and verified |
 
 ## 4. Implemented Control 1: CIS 3.1.20 `log_connections`
 
@@ -174,7 +175,53 @@ CIS 3.1.20 passed: log_connections is enabled in the running PostgreSQL instance
 | Hardening is executed only at build time | The remediation is performed in `Dockerfile` via `RUN ansible-playbook ...`; no container startup playbook is used |
 | Final running system is compliant | `docker compose --profile audit run --rm audit` returns a passing assertion for `SHOW log_connections;` |
 
-## 5. Security Architecture Verification
+## 5. Implemented Control 2: CIS 4.5 Excessive Function Privileges
+
+### Benchmark Requirement
+
+The CIS PostgreSQL 16 Benchmark requires excessive function privileges to be revoked. In practice, this means user-defined functions should not retain unnecessary `SECURITY DEFINER` behavior, session configuration overrides, or broad `PUBLIC` execute privileges unless that access is explicitly required.
+
+### Why This Control Matters
+
+Functions can become privilege-escalation boundaries inside PostgreSQL. If a function executes with elevated rights or is callable by every role through `PUBLIC`, application users can gain capabilities beyond the privileges they were assigned directly.
+
+### Implementation Approach
+
+This control is implemented as build-time staging plus runtime verification:
+
+1. **Build-time remediation**: `postgres_hardened/hardening/controls/cis_4_3_admin_privileges/main.yml` copies a SQL hardening script into `/docker-entrypoint-initdb.d/` while the hardened image is being built.
+2. **Initialization-time enforcement**: `postgres_hardened/hardening/controls/cis_4_3_admin_privileges/revoke_function_privileges.sql` revokes `EXECUTE` on existing `public` schema functions from `PUBLIC` and revokes default `PUBLIC EXECUTE` on future functions created in that schema.
+3. **Runtime verification**: `postgres_hardened/hardening/controls/cis_4_3_admin_privileges/audit.yml` queries the live database and fails if any non-system user-defined function is `SECURITY DEFINER`, has `proconfig` set, or remains executable by `PUBLIC`.
+
+This preserves the project rule that hardening runs only during image build while still auditing the final running database instance.
+
+### Runtime Audit Execution
+
+After the stack is healthy, both implemented controls are audited together with:
+
+```bash
+docker compose --profile audit run --rm audit
+```
+
+The `audit` profile now executes `postgres_hardened/hardening/audit.yml`, which runs the control-specific runtime audits for CIS 3.1.20 and CIS 4.5 in a single pass against the live `postgres` service.
+
+### Audit Result
+
+The runtime audit passed against the implemented system:
+
+```text
+CIS 4.5 passed: no user-defined functions with excessive privileges were found.
+```
+
+### Evidence Of Compliance
+
+| Verification Item | Evidence |
+|-------------------|----------|
+| Existing public-schema functions are stripped of broad execute access during initialization | The image stages `revoke_function_privileges.sql` into `/docker-entrypoint-initdb.d/` |
+| Future public-schema functions do not inherit `PUBLIC EXECUTE` by default | The initialization SQL runs `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;` |
+| Final running system is compliant | `docker compose --profile audit run --rm audit` reports no user-defined privileged functions for the CIS 4.5 audit |
+
+## 6. Security Architecture Verification
 
 The following tests were executed against the running `with_proxy_CIS` stack to verify the broader defense-in-depth architecture that surrounds the CIS control implementation.
 
@@ -195,9 +242,9 @@ The following tests were executed against the running `with_proxy_CIS` stack to 
 - **Tests 2 and 6** confirm **TLS everywhere**: PostgreSQL has SSL enabled, and the backend connection from PgBouncer uses certificate-authenticated TLS.
 - **Tests 3, 4, and 5** confirm **passwordless mTLS**: a valid client certificate is required to establish a connection, and no password is needed.
 - **Test 7** confirms **least-privilege authorization**: the backend role can read data but cannot modify it.
-- **The CIS 3.1.20 audit** confirms that the live PostgreSQL instance is running with `log_connections = on`.
+- **The CIS runtime audit** confirms that the live PostgreSQL instance is running with `log_connections = on` and no violating user-defined function privilege patterns.
 
-## 6. Baseline Vs. Hardened Comparison
+## 7. Baseline Vs. Hardened Comparison
 
 | Aspect | Baseline | Hardened |
 |--------|----------|---------|

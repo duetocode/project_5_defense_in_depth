@@ -29,7 +29,8 @@ The runtime audit is intentionally separate from image build so it verifies the 
 docker compose --profile audit run --rm audit
 ```
 
-This starts a one-off audit container on the backend network and runs [postgres_hardened/hardening/controls/cis_3_1_20_log_connections/audit.yml](postgres_hardened/hardening/controls/cis_3_1_20_log_connections/audit.yml) against the running `postgres` service.
+This starts a one-off audit container on the backend network and runs [postgres_hardened/hardening/audit.yml](postgres_hardened/hardening/audit.yml) against the running `postgres` service.
+The root audit playbook executes all implemented controls and reports any failure in a single run.
 
 ## Access the database with the legit client
 
@@ -53,6 +54,7 @@ The password of the client's secret key is `xipXig-xohryq-hebno6`.
 
 - Build-time hardening is orchestrated by [postgres_hardened/hardening/playbook.yml](postgres_hardened/hardening/playbook.yml).
 - CIS 3.1.20 is applied by editing PostgreSQL sample configuration files in the image filesystem, so newly initialized clusters inherit `log_connections = 'on'` without live SQL changes.
+- The control stored under [postgres_hardened/hardening/controls/cis_4_3_admin_privileges](postgres_hardened/hardening/controls/cis_4_3_admin_privileges) implements CIS benchmark section 4.5 by revoking excessive function execute privileges from `PUBLIC` during cluster initialization and auditing the live database for privileged user-defined functions.
 - The runtime audit targets `postgres` directly on the backend network rather than the `database` PgBouncer service, because the control applies to PostgreSQL itself.
 
 ---

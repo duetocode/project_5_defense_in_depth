@@ -1,0 +1,53 @@
+---
+- name: Audit CIS 4.5 against the running PostgreSQL service
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    cis_audit_postgres_host: "{{ audit_postgres_host | default('postgres', true) }}"
+    cis_audit_postgres_port: "{{ audit_postgres_port | default('5432', true) }}"
+    cis_audit_postgres_db: "{{ audit_postgres_db | default('finance', true) }}"
+    cis_audit_postgres_user: "{{ audit_postgres_user | default('database', true) }}"
+    cis_audit_sslmode: "{{ audit_sslmode | default('verify-full', true) }}"
+    cis_audit_ssl_cert_file: "{{ audit_ssl_cert_file | default('/certs-source/pgbouncer.crt', true) }}"
+    cis_audit_ssl_key_file: "{{ audit_ssl_key_file | default('/tmp/pgbouncer.key', true) }}"
+    cis_audit_ssl_rootcert_file: "{{ audit_ssl_rootcert_file | default('/certs-source/ca.crt', true) }}"
+  tasks:
+    - name: Wait for PostgreSQL to accept SSL connections
+      ansible.builtin.wait_for:
+        host: "{{ cis_audit_postgres_host }}"
+        port: "{{ cis_audit_postgres_port | int }}"
+        timeout: 30
+
+    - name: Query user-defined functions with excessive privileges
+      ansible.builtin.command:
+        argv:
+          - psql
+          - "host={{ cis_audit_postgres_host }} port={{ cis_audit_postgres_port }} dbname={{ cis_audit_postgres_db }} user={{ cis_audit_postgres_user }} sslmode={{ cis_audit_sslmode }} sslcert={{ cis_audit_ssl_cert_file }} sslkey={{ cis_audit_ssl_key_file }} sslrootcert={{ cis_audit_ssl_rootcert_file }}"
+          - -Atqc
+          - |
+            SELECT format('%I.%I(%s)', n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid))
+            FROM pg_catalog.pg_proc AS p
+            JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+            WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              AND p.proname NOT LIKE 'pgaudit%'
+              AND (
+                p.prosecdef
+                OR p.proconfig IS NOT NULL
+                OR EXISTS (
+                  SELECT 1
+                  FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) AS acl
+                  WHERE acl.grantee = 0
+                    AND acl.privilege_type = 'EXECUTE'
+                )
+              )
+            ORDER BY 1;
+      register: cis_4_5_function_privilege_audit
+      changed_when: false
+
+    - name: Assert CIS 4.5 passes at runtime
+      ansible.builtin.assert:
+        that:
+          - cis_4_5_function_privilege_audit.stdout | trim | length == 0
+        fail_msg: "CIS 4.5 failed: user-defined functions with excessive privileges were found.\n{{ cis_4_5_function_privilege_audit.stdout }}"
+        success_msg: "CIS 4.5 passed: no user-defined functions with excessive privileges were found."

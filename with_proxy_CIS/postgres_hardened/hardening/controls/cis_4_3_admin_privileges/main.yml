@@ -1,0 +1,6 @@
+---
+- name: Stage function privilege hardening script for cluster initialization
+  ansible.builtin.copy:
+    src: /opt/postgres_hardening/controls/cis_4_3_admin_privileges/revoke_function_privileges.sql
+    dest: /docker-entrypoint-initdb.d/cis_4_5_revoke_function_privileges.sql
+    mode: '0644'

@@ -86,7 +86,7 @@ services:
       - |
         cp /certs-source/pgbouncer.key /tmp/pgbouncer.key
         chmod 0600 /tmp/pgbouncer.key
-        exec ansible-playbook /opt/postgres_hardening/controls/cis_3_1_20_log_connections/audit.yml
+        exec ansible-playbook /opt/postgres_hardening/audit.yml
     depends_on:
       postgres:
         condition: service_healthy

@@ -10,3 +10,6 @@
   tasks:
     - name: Apply CIS 3.1.20 hardening tasks
       ansible.builtin.import_tasks: controls/cis_3_1_20_log_connections/main.yml
+
+    - name: Apply CIS 4.5 hardening tasks
+      ansible.builtin.import_tasks: controls/cis_4_3_admin_privileges/main.yml

@@ -1,0 +1,3 @@
+---
+- import_playbook: controls/cis_3_1_20_log_connections/audit.yml
+- import_playbook: controls/cis_4_3_admin_privileges/audit.yml
